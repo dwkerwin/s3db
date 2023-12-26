@@ -75,7 +75,7 @@ class S3DB {
     let isTruncated = true;
     while (isTruncated) {
       const data = await this.s3.listObjects(params).promise();
-      allKeys.push(...data.Contents.map((obj) => obj.Key.replace(fullPath, '')));
+      allKeys.push(...data.Contents.map((obj) => obj.Key.replace(fullPrefix, '')));
       isTruncated = data.IsTruncated;
       if (isTruncated) {
         params.Marker = data.Contents[data.Contents.length - 1].Key;
