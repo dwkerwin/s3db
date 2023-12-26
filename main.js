@@ -60,17 +60,25 @@ class S3DB {
     //console.log(`Object updated: s3://${this.bucketName}/${s3Key}`);
   }
 
-  async list() {
+  async list(subPath = '') {
+    // if a subPath is provided, join that with the already set prefix
+    let fullPrefix = this.prefix;
+    if (subPath) {
+      if (!this.prefix.endsWith('/') && !subPath.startsWith('/')) {
+        fullPrefix += '/';
+      }
+      fullPrefix += subPath;
+    }
     const params = {
       Bucket: this.bucketName,
-      Prefix: this.prefix,
+      Prefix: fullPrefix,
     };
 
     const allKeys = [];
     let isTruncated = true;
     while (isTruncated) {
       const data = await this.s3.listObjects(params).promise();
-      allKeys.push(...data.Contents.map((obj) => obj.Key.replace(this.prefix, '')));
+      allKeys.push(...data.Contents.map((obj) => obj.Key.replace(fullPath, '')));
       isTruncated = data.IsTruncated;
       if (isTruncated) {
         params.Marker = data.Contents[data.Contents.length - 1].Key;
@@ -78,7 +86,6 @@ class S3DB {
     }
 
     return allKeys;
-  }
-}
+  }}
 
 module.exports = S3DB;
