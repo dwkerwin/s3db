@@ -10,7 +10,7 @@ class S3DB {
   }
 
   async put(key, data) {
-    const s3Key = this.prefix + key;
+    const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
       Key: s3Key,
@@ -22,7 +22,7 @@ class S3DB {
   }
 
   async get(key, options = {}) {
-    const s3Key = this.prefix + key;
+    const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
       Key: s3Key,
@@ -41,7 +41,7 @@ class S3DB {
   }
 
   async delete(key) {
-    const s3Key = this.prefix + key;
+    const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
       Key: s3Key,
@@ -52,7 +52,7 @@ class S3DB {
   }
 
   async update(key, newData) {
-    const s3Key = this.prefix + key;
+    const s3Key = joinPath(this.prefix, key);
     const existingData = await this.get(key);
     const updatedData = { ...existingData, ...newData };
 
@@ -64,10 +64,7 @@ class S3DB {
     // if a subPath is provided, join that with the already set prefix
     let fullPrefix = this.prefix;
     if (subPath) {
-      if (!this.prefix.endsWith('/') && !subPath.startsWith('/')) {
-        fullPrefix += '/';
-      }
-      fullPrefix += subPath;
+      fullPrefix = joinPath(this.prefix, subPath);
     }
     const params = {
       Bucket: this.bucketName,
@@ -86,6 +83,11 @@ class S3DB {
     }
 
     return allKeys;
-  }}
+  }
+}
+
+function joinPath(...parts) {
+  return parts.join('/').replace(/\/+/g, '/');
+}
 
 module.exports = S3DB;
