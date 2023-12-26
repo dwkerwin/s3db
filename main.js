@@ -53,7 +53,7 @@ class S3DB {
 
   async update(key, newData) {
     const s3Key = joinPath(this.prefix, key);
-    const existingData = await this.get(key);
+    const existingData = await this.get(s3Key);
     const updatedData = { ...existingData, ...newData };
 
     await this.put(key, updatedData);
