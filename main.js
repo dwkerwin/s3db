@@ -9,12 +9,18 @@ class S3DB {
     this.s3 = new AWS.S3();
   }
 
-  async put(key, data) {
+  async put(key, data, options = {}) {
+    let body=null;
+    if (options.formatForReadability) {
+      body = JSON.stringify(data, null, 2);
+    } else {
+      body = JSON.stringify(data);
+    }
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
       Key: s3Key,
-      Body: JSON.stringify(data),
+      Body: body,
     };
 
     await this.s3.upload(params).promise();
