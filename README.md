@@ -1,6 +1,6 @@
 # S3DB
 
-S3DB is a library that provides a database like interface for the Amazon S3 object storage service. The motivation behind S3DB is cost effectiveness. By leveraging S3 as a datastore, you can significantly reduce costs compared to using a traditional database like Amazon DynamoDB. However, it's important to note that S3DB is not a drop in replacement for a database. Underneath the interface, it's still S3, and it comes with the limitations inherent to an object storage service. This means that while S3DB provides a database like interface for storing and retrieving data, it should still be treated as S3. If your application can work within these limitations, S3DB offers a cost effective way to manage your data with an interface that is similar to a database, but at a fraction of the cost.
+S3DB provides a database like interface for the Amazon S3 object storage service. The motivation behind S3DB is cost effectiveness. By leveraging S3 as a datastore, you can significantly reduce costs compared to using a database like Amazon DynamoDB. However, it's important to note that S3DB is not a drop in replacement for a database. Underneath the interface, it's still S3, and it comes with the limitations inherent to an object storage service. This means that while S3DB provides a database like interface for storing and retrieving data, it should still be treated as S3. If your application can work within these limitations, S3DB offers a cost effective way to manage your data with an interface that is similar to a database, but at a fraction of the cost.
 
 ## Installation
 
@@ -21,7 +21,7 @@ const s3db = new S3DB('mybucketname', 'myprefix/');
 
 // Get an item
 const userData = await s3db.get('myuserid.json');
-// this will retrieve a file stored at s3://mybucketname/myprefix/myuserid.json
+// this will retrieve an object stored at s3://mybucketname/myprefix/myuserid.json
 
 // Put an item
 const newUserData = { name: 'John Doe', email: 'john.doe@example.com' };
@@ -31,7 +31,7 @@ await s3db.put('newuserid.json', newUserData);
 // Update an item
 const updatedUserData = { name: 'Jane Doe', email: 'jane.doe@example.com' };
 await s3db.update('myuserid.json', updatedUserData);
-// this will update the file at s3://mybucketname/myprefix/myuserid.json with updatedUserData
+// this will update the object at s3://mybucketname/myprefix/myuserid.json with updatedUserData
 
 // Delete an item
 await s3db.delete('myuserid.json');
