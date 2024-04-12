@@ -1,4 +1,5 @@
 const AWS = require('aws-sdk');
+const logger = require('./logger');
 
 class S3DB {
   constructor(bucketName, prefix = '') {
@@ -24,7 +25,7 @@ class S3DB {
     };
 
     await this.s3.upload(params).promise();
-    //console.log(`Object uploaded: s3://${this.bucketName}/${s3Key}`);
+    logger.trace(`Object uploaded: s3://${this.bucketName}/${s3Key}`);
   }
 
   async get(key, options = {}) {
@@ -36,6 +37,7 @@ class S3DB {
 
     try {
         const data = await this.s3.getObject(params).promise();
+        logger.trace(`Object retrieved: s3://${this.bucketName}/${s3Key}`)
         return JSON.parse(data.Body.toString());
     }
     catch (err) {
@@ -54,7 +56,7 @@ class S3DB {
     };
 
     await this.s3.deleteObject(params).promise();
-    //console.log(`Object deleted: s3://${this.bucketName}/${s3Key}`);
+    logger.trace(`Object deleted: s3://${this.bucketName}/${s3Key}`);
   }
 
   async update(key, newData) {
@@ -63,7 +65,7 @@ class S3DB {
     const updatedData = { ...existingData, ...newData };
 
     await this.put(key, updatedData);
-    //console.log(`Object updated: s3://${this.bucketName}/${s3Key}`);
+    logger.trace(`Object updated: s3://${this.bucketName}/${s3Key}`);
   }
 
   async list(subPath = '') {
@@ -88,6 +90,7 @@ class S3DB {
       }
     }
 
+    logger.trace(`Returning list of ${allKeys.length} keys retrieved from: s3://${this.bucketName}/${fullPrefix}`);
     return allKeys;
   }
 }
