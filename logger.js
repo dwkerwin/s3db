@@ -1,7 +1,6 @@
 const bunyan = require('bunyan');
 const PrettyStream = require('bunyan-prettystream');
 const prettyStdOut = new PrettyStream();
-const config = require("./config");
 
 let stream = process.stdout
 // only when running in development, pretty up the output
@@ -14,7 +13,7 @@ module.exports = bunyan.createLogger({
     name: 's3db',
     streams: [
         {
-            level: config.LOG_LEVEL,
+            level: process.env.LOG_LEVEL || 'info',
             stream: stream
         }
     ]
