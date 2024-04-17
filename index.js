@@ -93,6 +93,28 @@ class S3DB {
     logger.trace(`Returning list of ${allKeys.length} keys retrieved from: s3://${this.bucketName}/${fullPrefix}`);
     return allKeys;
   }
+
+  async exists(key) {
+    const s3Key = joinPath(this.prefix, key);
+    const params = {
+      Bucket: this.bucketName,
+      Key: s3Key,
+    };
+
+    try {
+      await this.s3.headObject(params).promise();
+      logger.trace(`Object exists: s3://${this.bucketName}/${s3Key}`);
+      return true;
+    } catch (err) {
+      if (err.code === 'NotFound') {
+        logger.trace(`Object does not exist: s3://${this.bucketName}/${s3Key}`);
+        return false;
+      }
+      logger.error(`Error checking if object exists: s3://${this.bucketName}/${s3Key}`, err);
+      throw err;
+    }
+  }
+
 }
 
 function joinPath(...parts) {
