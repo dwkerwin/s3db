@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  UnittestBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 's3dbunittestbucket'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+  UnittestBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref UnittestBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'DenyPublicReadACL'
+            Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${UnittestBucket}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': ['public-read', 'public-read-write', 'authenticated-read']
+          - Sid: 'DenyPublicReadGrant'
+            Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${UnittestBucket}/*'
+            Condition:
+              StringLike:
+                's3:x-amz-grant-read': '*'

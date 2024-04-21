@@ -17,29 +17,57 @@ AWS credentials are acquired from environment variables.
 const S3DB = require('@dwkerwin/s3db');
 
 // Create a new instance of S3DB
-const s3db = new S3DB('mybucketname', 'myprefix/');
-
-// Get an item
-const userData = await s3db.get('myuserid.json');
-// this will retrieve an object stored at s3://mybucketname/myprefix/myuserid.json
+const s3db = new S3DB('myuserdatabucket', 'users');
 
 // Put an item
 const newUserData = { name: 'John Doe', email: 'john.doe@example.com' };
-await s3db.put('newuserid.json', newUserData);
-// this will store newUserData at s3://mybucketname/myprefix/newuserid.json
+const userId = 'U12345';
+await s3db.put(userId, newUserData);
+// this will store newUserData at s3://myuserdatabucket/users/U12345.json
+// note that the following statement is equivalent:
+// await s3db.put('U12345.json', newUserData);
 
-// Update an item
+// Get an item
+const userData = await s3db.get(userId);
+// this will retrieve an object stored at s3://myuserdatabucket/users/U12345.json
+console.log(`User name: ${userData.name} (${user.email})`);
+
+// Replace an item
 const updatedUserData = { name: 'Jane Doe', email: 'jane.doe@example.com' };
-await s3db.update('myuserid.json', updatedUserData);
-// this will update the object at s3://mybucketname/myprefix/myuserid.json with updatedUserData
+await s3db.put(userId, updatedUserData);
+// this will update the object at s3://myuserdatabucket/users/U12345.json with updatedUserData
 
-// Delete an item
-await s3db.delete('myuserid.json');
-// this will delete the file at s3://mybucketname/myprefix/myuserid.json
+// Update an item with an additional propery, preserving existing properties
+await s3db.update(userId, { address: '123 Main St.' });
 
 // List items
-const items = await s3db.list();
-// this will return a list of all items in s3://mybucketname/myprefix/, including items in subdirectories
+const allUserKeys = await s3db.list();
+// this will return a list of all items in s3://myuserdatabucket/users/,
+// including items in subdirectories, e.g.: ['U12345']
+for (const userKey of allUserKeys) {
+    const user = s3db.get(userKey);
+    console.log(`Found user: ${user.name} (${user.email})`);
+}
+
+// Delete an item
+await s3db.delete(userId);
+// this will delete the file at s3://myuserdatabucket/users/U12345.json
+// note that the following statement is equivalent:
+// s3db.delete('U12345.json');
+```
+
+## Create Testing Infrastructure
+
+This is to create the testin S3 bucket necessary to run unit tests.  Requires the AWS CLI and active AWS credentials to be configured in the environment.
+
+```shell
+aws cloudformation create-stack --stack-name S3DBUnitTestStack --template-body file://cloudformation.yml
+```
+
+## Test
+
+```shell
+npm test
 ```
 
 ## Publish to NPM
