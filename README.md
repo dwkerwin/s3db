@@ -32,6 +32,13 @@ const userData = await s3db.get(userId);
 // this will retrieve an object stored at s3://myuserdatabucket/users/U12345.json
 console.log(`User name: ${userData.name} (${user.email})`);
 
+// By default, `get` throws an exception if the object isn't found
+// However, you can use the `returnNullIfNotFound` option to return null instead
+const missingRecord = await s3db.get('thiswillnotexist', { returnNullIfNotFound: true });
+if (missingRecord === null) {
+    console.log('Object does not exist');
+}
+
 // Replace an item
 const updatedUserData = { name: 'Jane Doe', email: 'jane.doe@example.com' };
 await s3db.put(userId, updatedUserData);

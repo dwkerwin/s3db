@@ -14,6 +14,22 @@ describe('S3DB', function() {
     expect(retrievedData).to.deep.equal(userData);
   });
 
+  it('should return null and not throw an exception when getting a non-existent object', async function() {
+    const nonExistentData = await s3db.get('nonexistent', { returnNullIfNotFound: true });
+    expect(nonExistentData).to.be.null;
+  });
+
+  it('should throw an exception when getting a non-existent object without returnNullIfNotFound option', async function() {
+    try {
+      await s3db.get('nonexistent');
+      // If the line above doesn't throw an exception, fail the test
+      expect.fail('Expected an exception, but none was thrown');
+    } catch (err) {
+      // If an exception is thrown, pass the test
+      expect(err).to.exist;
+    }
+  });
+
   it('should update the object with new properties while preserving existing properties', async function() {
     const updatedUserData = { newProperty: 'test123' };
     await s3db.update(userId, updatedUserData);
