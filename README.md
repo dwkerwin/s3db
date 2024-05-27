@@ -63,6 +63,38 @@ await s3db.delete(userId);
 // s3db.delete('U12345.json');
 ```
 
+## Working with Blobs
+
+In addition to the standard methods for working with JSON objects, S3DB also provides methods for working with blobs of any type. These methods are:
+
+- `putBlob(key, data)`: Stores a blob of data at the specified key.
+- `getBlob(key)`: Retrieves the blob of data stored at the specified key.
+- `deleteBlob(key)`: Deletes the blob of data stored at the specified key.
+- `existsBlob(key)`: Checks if a blob of data exists at the specified key.
+
+These methods work in the same way as their counterparts for JSON objects, but they do not assume any specific data type or extension. This makes them suitable for working with any type of data, not just JSON.
+
+Here's an example of how to use these methods:
+
+```javascript
+const blobKey = 'B12345';
+const blobData = Buffer.from('Hello, world!', 'utf-8');
+
+// Store the blob data
+await s3db.putBlob(blobKey, blobData);
+
+// Retrieve the blob data
+const retrievedData = await s3db.getBlob(blobKey);
+console.log(retrievedData.toString('utf-8')); // Outputs: 'Hello, world!'
+
+// Check if the blob data exists
+const doesExist = await s3db.existsBlob(blobKey);
+console.log(doesExist); // Outputs: true
+
+// Delete the blob data
+await s3db.deleteBlob(blobKey);
+```
+
 ## Create Testing Infrastructure
 
 This is to create the testin S3 bucket necessary to run unit tests.  Requires the AWS CLI and active AWS credentials to be configured in the environment.

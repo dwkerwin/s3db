@@ -69,4 +69,29 @@ describe('S3DB', function() {
     const allUserKeys = await s3db.list();
     expect(allUserKeys).to.not.include(userId);
   });
+
+  it('should create a blob object', async function() {
+    const blobKey = 'B12345';
+    const blobData = Buffer.from('Hello, world!', 'utf-8');
+    await s3db.putBlob(blobKey, blobData);
+    const retrievedData = await s3db.getBlob(blobKey);
+    expect(retrievedData.toString('utf-8')).to.equal('Hello, world!');
+  });
+
+  it('should check if the blob object exists', async function() {
+    const blobKey = 'B12345';
+    const blobData = Buffer.from('Hello, world!', 'utf-8');
+    await s3db.putBlob(blobKey, blobData);
+    const doesExist = await s3db.existsBlob(blobKey);
+    expect(doesExist).to.be.true;
+    await s3db.deleteBlob(blobKey);
+  });
+
+  it('should delete the blob object', async function() {
+    const blobKey = 'B12345';
+    await s3db.deleteBlob(blobKey);
+    const doesExist = await s3db.existsBlob(blobKey);
+    expect(doesExist).to.be.false;
+  });
+
 });

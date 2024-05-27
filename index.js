@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const logger = require('./logger');
+const path = require('path');
 
 class S3DB {
   constructor(bucketName, prefix = '') {
@@ -18,48 +19,65 @@ class S3DB {
     this.s3 = new AWS.S3();
   }
 
-  async put(key, data, options = {}) {
-    key = ensureJsonExtension(key);
-    let body=null;
-    if (options.formatForReadability) {
-      body = JSON.stringify(data, null, 2);
-    } else {
-      body = JSON.stringify(data);
-    }
+  async putBlob(key, data) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
       Key: s3Key,
-      Body: body,
+      Body: data,
     };
 
     logger.trace(`S3DB: Uploading object: s3://${this.bucketName}/${s3Key}`);
     await this.s3.upload(params).promise();
   }
 
-  async get(key, options = {}) {
+  async put(key, data, options = {}) {
     key = ensureJsonExtension(key);
+    let body = null;
+    if (options.formatForReadability) {
+      body = JSON.stringify(data, null, 2);
+    } else {
+      body = JSON.stringify(data);
+    }
+
+    await this.putBlob(key, body);
+  }
+
+  async getBlob(key) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
       Key: s3Key,
     };
-    logger.trace(`S3DB: Retrieving object: s3://${this.bucketName}/${s3Key}`)
+    logger.trace(`S3DB: Retrieving object: s3://${this.bucketName}/${s3Key}`);
 
     try {
-        const data = await this.s3.getObject(params).promise();
-        return JSON.parse(data.Body.toString());
-    }
-    catch (err) {
-        if (options.returnNullIfNotFound && err.code === 'NoSuchKey') {
-            return null;
-        }
-        throw err;
+      const data = await this.s3.getObject(params).promise();
+      return data.Body;
+    } catch (err) {
+      if (err.code === 'NoSuchKey') {
+        return null;
+      }
+      throw err;
     }
   }
 
-  async delete(key) {
+  async get(key, options = {}) {
     key = ensureJsonExtension(key);
+    const body = await this.getBlob(key);
+
+    if (body === null && options.returnNullIfNotFound) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(body.toString());
+    } catch (err) {
+      throw new Error(`Failed to parse JSON data for key ${key}: ${err.message}`);
+    }
+  }
+
+  async deleteBlob(key) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
@@ -68,6 +86,11 @@ class S3DB {
 
     logger.trace(`S3DB Deleting object: s3://${this.bucketName}/${s3Key}`);
     await this.s3.deleteObject(params).promise();
+  }
+
+  async delete(key) {
+    key = ensureJsonExtension(key);
+    await this.deleteBlob(key);
   }
 
   async update(key, newData) {
@@ -127,8 +150,7 @@ class S3DB {
     return allKeys;
   }
 
-  async exists(key) {
-    key = ensureJsonExtension(key);
+  async existsBlob(key) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
@@ -150,6 +172,11 @@ class S3DB {
     }
   }
 
+  async exists(key) {
+    key = ensureJsonExtension(key);
+    return await this.existsBlob(key);
+  }
+
 }
 
 // Helper function to join path parts
@@ -158,11 +185,12 @@ class S3DB {
 // e.g. joinPath('a', 'b', 'c') => 'a/b/c'
 // e.g. joinPath('a/', '/b', 'c/') => 'a/b/c'
 function joinPath(...parts) {
-  let path = parts.join('/').replace(/\/+/g, '/');
-  if (path.endsWith('/') && path.length > 1) {
-    path = path.slice(0, -1);
-  }
-  return path;
+  // let path = parts.filter(part => part !== '').join('/');
+  // if (path.endsWith('/') && path.length > 1) {
+  //   path = path.slice(0, -1);
+  // }
+  // return path;
+  return path.join(...parts);
 }
 
 function ensureJsonExtension(key) {
