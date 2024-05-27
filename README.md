@@ -74,6 +74,7 @@ aws cloudformation create-stack --stack-name S3DBUnitTestStack --template-body f
 ## Test
 
 ```shell
+export AWS_PROFILE="your AWS profile here"
 npm test
 ```
 

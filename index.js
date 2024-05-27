@@ -3,6 +3,14 @@ const logger = require('./logger');
 
 class S3DB {
   constructor(bucketName, prefix = '') {
+    if (typeof bucketName !== 'string') {
+      throw new Error(`Invalid bucket name: ${bucketName}. Bucket name must be a string.`);
+    }
+
+    if (typeof prefix !== 'string') {
+      throw new Error(`Invalid prefix: ${prefix}. Prefix must be a string.`);
+    }
+
     this.bucketName = bucketName;
     this.prefix = prefix;
 
@@ -80,6 +88,11 @@ class S3DB {
   // ['key1', 'key2', 'subkey/sbkey1']
   // Note that this will return only the keys, not the actual objects.
   async list(subPath = '') {
+    // Check that subPath is a string
+    if (typeof subPath !== 'string') {
+      throw new Error(`Invalid subPath: ${subPath}. SubPath must be a string.`);
+    }
+
     // if a subPath is provided, join that with the already set prefix
     let fullPrefix = this.prefix;
     if (subPath) {
@@ -98,15 +111,18 @@ class S3DB {
     let iteration = 0;
     while (isTruncated) {
       iteration++;
-      const data = await this.s3.listObjects(params).promise();
-      allKeys.push(...data.Contents.map((obj) => obj.Key.replace(fullPrefix + '/', '').replace('.json', '')));
-      isTruncated = data.IsTruncated;
-      if (isTruncated) {
-        params.Marker = data.Contents[data.Contents.length - 1].Key;
+      try {
+        const data = await this.s3.listObjects(params).promise();
+        allKeys.push(...data.Contents.map((obj) => obj.Key.replace(fullPrefix + '/', '').replace('.json', '')));
+        isTruncated = data.IsTruncated;
+        if (isTruncated) {
+          params.Marker = data.Contents[data.Contents.length - 1].Key;
+        }
+        logger.trace(`S3DB: Iteration ${iteration}, retrieved ${data.Contents.length} keys from: s3://${this.bucketName}/${fullPrefix}`);
+      } catch (err) {
+        throw new Error(`Failed to list objects in bucket ${this.bucketName} with prefix ${fullPrefix}: ${err.message}`);
       }
-      logger.trace(`S3DB: Iteration ${iteration}, retrieved ${data.Contents.length} keys from: s3://${this.bucketName}/${fullPrefix}`);
     }
-
     logger.trace(`S3DB: Total ${allKeys.length} keys retrieved from: s3://${this.bucketName}/${fullPrefix}`);
     return allKeys;
   }
