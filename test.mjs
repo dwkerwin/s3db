@@ -75,6 +75,16 @@ describe('S3DB', function() {
     expect(allUserKeys).to.not.include(userId);
   });
 
+  it('should retrieve the correct string data', async function() {
+    const stringKey = 'S12345';
+    const stringData = 'Hello, world!';
+    const bufferData = Buffer.from(stringData, 'utf-8');
+    await s3db.putBlob(stringKey, bufferData);
+    const retrievedData = await s3db.getString(stringKey, { encoding: 'utf-8' });
+    expect(retrievedData).to.equal(stringData);
+    await s3db.deleteBlob(stringKey);
+  });
+
   it('should create a blob object', async function() {
     const blobKey = 'B12345';
     const blobData = Buffer.from('Hello, world!', 'utf-8');

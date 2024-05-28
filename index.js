@@ -77,6 +77,14 @@ class S3DB {
     }
   }
 
+  // getBlob returns a buffer, so if we want it as a string, here's a handy
+  // wrapper function to convert it to a string
+  async getString(key, options = {}) {
+    const encoding = options.encoding || 'utf-8';
+    const body = await this.getBlob(key, options);
+    return body ? body.toString(encoding) : null;
+  }
+
   async deleteBlob(key) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
