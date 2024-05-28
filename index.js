@@ -43,7 +43,7 @@ class S3DB {
     await this.putBlob(key, body);
   }
 
-  async getBlob(key) {
+  async getBlob(key, options = {}) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
@@ -55,7 +55,7 @@ class S3DB {
       const data = await this.s3.getObject(params).promise();
       return data.Body;
     } catch (err) {
-      if (err.code === 'NoSuchKey') {
+      if (err.code === 'NoSuchKey' && options.returnNullIfNotFound) {
         return null;
       }
       throw err;
@@ -64,9 +64,9 @@ class S3DB {
 
   async get(key, options = {}) {
     key = ensureJsonExtension(key);
-    const body = await this.getBlob(key);
+    const body = await this.getBlob(key, options);
 
-    if (body === null && options.returnNullIfNotFound) {
+    if (body === null) {
       return null;
     }
 

@@ -19,6 +19,11 @@ describe('S3DB', function() {
     expect(nonExistentData).to.be.null;
   });
 
+  it('should return null and not throw an exception when getting a non-existent blob', async function() {
+    const nonExistentBlob = await s3db.getBlob('nonexistent', { returnNullIfNotFound: true });
+    expect(nonExistentBlob).to.be.null;
+  });
+
   it('should throw an exception when getting a non-existent object without returnNullIfNotFound option', async function() {
     try {
       await s3db.get('nonexistent');
