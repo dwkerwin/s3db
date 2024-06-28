@@ -56,6 +56,7 @@ class S3DB {
       return data.Body;
     } catch (err) {
       if (err.code === 'NoSuchKey' && options.returnNullIfNotFound) {
+        logger.trace(`S3DB: Object not found: s3://${this.bucketName}/${s3Key}`);
         return null;
       }
       throw err;
@@ -158,31 +159,101 @@ class S3DB {
     return allKeys;
   }
 
-  async existsBlob(key) {
-    const s3Key = joinPath(this.prefix, key);
+  async existsFullyQualified(key) {
     const params = {
       Bucket: this.bucketName,
-      Key: s3Key,
+      Key: key,
     };
 
     try {
-      logger.trace(`Checking for object existence at: s3://${this.bucketName}/${s3Key}`);
+      logger.trace(`S3DB: Checking for object existence at: s3://${this.bucketName}/${key}`);
       await this.s3.headObject(params).promise();
-      logger.trace(`Object exists: s3://${this.bucketName}/${s3Key}`);
+      logger.trace(`S3DB: Object exists: s3://${this.bucketName}/${key}`);
       return true;
     } catch (err) {
       if (err.code === 'NotFound') {
-        logger.trace(`Object does not exist: s3://${this.bucketName}/${s3Key}`);
+        logger.trace(`S3DB: Object does not exist: s3://${this.bucketName}/${key}`);
         return false;
       }
-      logger.error(`Error checking if object exists: s3://${this.bucketName}/${s3Key}`, err);
+      logger.error(`S3DB: Error checking if object exists: s3://${this.bucketName}/${key}`, err);
       throw err;
     }
   }
 
+  async existsBlob(key) {
+    const s3Key = joinPath(this.prefix, key); // Construct the fully qualified key
+    return await this.existsFullyQualified(s3Key); // Delegate to existsFullyQualified
+  }
+
   async exists(key) {
-    key = ensureJsonExtension(key);
-    return await this.existsBlob(key);
+    key = ensureJsonExtension(key); // Ensure the key has a JSON extension
+    const s3Key = joinPath(this.prefix, key); // Construct the fully qualified key
+    return await this.existsFullyQualified(s3Key); // Delegate to existsFullyQualified
+  }
+
+  async copy(relativeKey, newRelativeKey) {
+    relativeKey = ensureJsonExtension(relativeKey);
+    newRelativeKey = ensureJsonExtension(newRelativeKey);
+    const sourcePath = path.join(this.prefix, relativeKey);
+    const destinationPath = path.join(this.prefix, newRelativeKey); // Ensure newPath is correctly prefixed for logging
+    logger.trace(`S3DB: Attempting to copy from ${sourcePath} to ${destinationPath}`);
+    await this.copyFullyQualified(sourcePath, destinationPath);
+  }
+
+  async move(relativeKey, newRelativeKey) {
+    relativeKey = ensureJsonExtension(relativeKey);
+    newRelativeKey = ensureJsonExtension(newRelativeKey);
+    const sourcePath = path.join(this.prefix, relativeKey);
+    const destinationPath = path.join(this.prefix, newRelativeKey); // Ensure newPath is correctly prefixed for logging
+    logger.trace(`S3DB: Attempting to move from ${sourcePath} to ${destinationPath}`);
+    await this.moveFullyQualified(sourcePath, destinationPath);
+  }
+  
+  // you need to specify the entire path for the source and destination,
+  // including file extension, this method will not append '.json' to the keys
+  async copyFullyQualified(sourcePath, destinationPath) {
+    // Check if the source object exists
+    const sourceExists = await this.existsFullyQualified(sourcePath);
+    if (!sourceExists) {
+      const errorMsg = `S3DB: Error copying object from ${sourcePath} to ${destinationPath}: The specified source key does not exist.`;
+      logger.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    const copyParams = {
+      Bucket: this.bucketName,
+      CopySource: `${this.bucketName}/${sourcePath}`,
+      Key: destinationPath,
+    };
+
+    try {
+      await this.s3.copyObject(copyParams).promise();
+      logger.trace(`S3DB: Copied object from ${sourcePath} to ${destinationPath}`);
+    } catch (err) {
+      logger.error(`S3DB: Error copying object from ${sourcePath} to ${destinationPath}: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // you need to specify the entire path for the source and destination,
+  // including file extension, this method will not append '.json' to the keys
+  async moveFullyQualified(sourcePath, destinationPath) {
+    // Use copyFullyQualified for the copy part of the move operation
+    await this.copyFullyQualified(sourcePath, destinationPath);
+
+    // Then delete the original object
+    const deleteParams = {
+      Bucket: this.bucketName,
+      Key: sourcePath,
+    };
+
+    try {
+      await this.s3.deleteObject(deleteParams).promise();
+      logger.trace(`S3DB: Deleted original object at ${sourcePath}`);
+    } catch (err) {
+      logger.error(`S3DB: Error deleting original object at ${sourcePath}: ${err.message}`);
+      throw err;
+    }
   }
 
 }

@@ -109,4 +109,66 @@ describe('S3DB', function() {
     expect(doesExist).to.be.false;
   });
 
+  // Test for copy method with setup
+  it('should copy an object to a new path', async function() {
+    // Setup: Ensure the object exists before copying
+    await s3db.put(userId, userData);
+    
+    const copyTarget = 'copy/U12345';
+    await s3db.copy(userId, copyTarget);
+    const copiedData = await s3db.get(copyTarget);
+    expect(copiedData).to.deep.equal(userData);
+    
+    // Cleanup
+    await s3db.delete(copyTarget);
+  });
+
+  // Test for copyFullyQualified method with setup
+  it('should copy an object to a new path using fully qualified paths', async function() {
+    // Setup: Ensure the object exists before copying
+    await s3db.put(userId, userData);
+    
+    const sourcePath = `users/${userId}.json`;
+    const destinationPath = `users/copyFullyQualified/U12345.json`;
+    await s3db.copyFullyQualified(sourcePath, destinationPath);
+    const copiedData = await s3db.get('copyFullyQualified/U12345.json');
+    expect(copiedData).to.deep.equal(userData);
+    
+    // Cleanup
+    await s3db.delete(destinationPath);
+  });
+
+  // Test for move method with setup
+  it('should move an object to a new path', async function() {
+    // Setup: Ensure the object exists before moving
+    await s3db.put(userId, userData);
+    
+    const moveTarget = 'move/U12345';
+    await s3db.move(userId, moveTarget);
+    const movedData = await s3db.get(moveTarget);
+    expect(movedData).to.deep.equal(userData);
+    const originalExists = await s3db.exists(userId);
+    expect(originalExists).to.be.false;
+    
+    // Cleanup
+    await s3db.delete(moveTarget);
+  });
+
+  // Test for moveFullyQualified method with setup
+  it('should move an object to a new path using fully qualified paths', async function() {
+    // Setup: Ensure the object exists before moving
+    await s3db.put(userId, userData);
+    
+    const sourcePath = `users/${userId}.json`;
+    const destinationPath = `users/moveFullyQualified/U12345.json`;
+    await s3db.moveFullyQualified(sourcePath, destinationPath);
+    const movedData = await s3db.get('moveFullyQualified/U12345.json');
+    expect(movedData).to.deep.equal(userData);
+    const originalExists = await s3db.exists(sourcePath);
+    expect(originalExists).to.be.false;
+    
+    // Cleanup
+    await s3db.delete(destinationPath);
+  });
+  
 });

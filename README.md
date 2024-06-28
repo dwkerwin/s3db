@@ -61,6 +61,24 @@ await s3db.delete(userId);
 // this will delete the file at s3://myuserdatabucket/users/U12345.json
 // note that the following statement is equivalent:
 // s3db.delete('U12345.json');
+
+// Copy an item within the same bucket
+await s3db.copy('U12345', 'archive/U12345');
+// This will copy the object from s3://myuserdatabucket/users/U12345.json to s3://myuserdatabucket/users/archive/U12345.json
+
+// Copy an item to a different path using fully qualified paths
+await s3db.copyFullyQualified('myuserdatabucket/users/U12345.json', 'myuserdatabucket/archive/U12345.json');
+// Note that here we're not subject to the same prefix since we're using fully
+// qualified paths
+
+// Move an item within the same bucket
+await s3db.move('U12345', 'old_users/U12345');
+// This will move the object from s3://myuserdatabucket/users/U12345.json to s3://myuserdatabucket/users/old_users/U12345.json
+
+// Move an item to a different path using fully qualified paths
+await s3db.moveFullyQualified('myuserdatabucket/users/U12345.json', 'myuserdatabucket/old_users/U12345.json');
+// Note that here we're not subject to the same prefix since we're using fully
+// qualified paths
 ```
 
 ## Working with Blobs
