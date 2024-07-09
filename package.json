@@ -1,6 +1,6 @@
 {
     "name": "@dwkerwin/s3db",
-    "version": "2.1.5",
+    "version": "2.1.6",
     "description": "",
     "main": "index.js",
     "author": "dwkerwin@gmail.com",

@@ -92,9 +92,15 @@ class S3DB {
       Bucket: this.bucketName,
       Key: s3Key,
     };
-
+  
     logger.trace(`S3DB Deleting object: s3://${this.bucketName}/${s3Key}`);
-    await this.s3.deleteObject(params).promise();
+    try {
+      await this.s3.deleteObject(params).promise();
+      logger.trace(`S3DB Successfully deleted object: s3://${this.bucketName}/${s3Key}`);
+    } catch (err) {
+      logger.error(`S3DB Error deleting object: s3://${this.bucketName}/${s3Key}`, err);
+      throw err;
+    }
   }
 
   async delete(key) {
@@ -120,18 +126,19 @@ class S3DB {
   // ['key1', 'key2', 'subkey/sbkey1']
   // Note that this will return only the keys, not the actual objects.
   async list(subPath = '') {
-    // Check that subPath is a string
     if (typeof subPath !== 'string') {
       throw new Error(`Invalid subPath: ${subPath}. SubPath must be a string.`);
     }
 
-    // if a subPath is provided, join that with the already set prefix
+    // Build the full prefix for the S3 path
     let fullPrefix = this.prefix;
     if (subPath) {
       fullPrefix = joinPath(this.prefix, subPath);
     }
-    // Ensure fullPrefix does not have a trailing '/'
-    fullPrefix = fullPrefix.endsWith('/') ? fullPrefix.slice(0, -1) : fullPrefix;
+    // Ensure the prefix ends with a '/'
+    fullPrefix = fullPrefix.endsWith('/') ? fullPrefix : fullPrefix + '/';
+
+    logger.trace(`S3DB: Listing objects with fullPrefix: ${fullPrefix}`);
 
     const params = {
       Bucket: this.bucketName,
@@ -144,21 +151,33 @@ class S3DB {
     while (isTruncated) {
       iteration++;
       try {
-        const data = await this.s3.listObjects(params).promise();
-        allKeys.push(...data.Contents.map((obj) => obj.Key.replace(fullPrefix + '/', '').replace('.json', '')));
+        // Fetch the list of objects from S3
+        const data = await this.s3.listObjectsV2(params).promise();
+
+        // Extract and filter keys from the response
+        const filteredKeys = extractKeys(data, fullPrefix);
+
+        // Append the filtered keys to the allKeys array
+        allKeys.push(...filteredKeys);
+
+        // Check if the response is truncated (more data to fetch)
         isTruncated = data.IsTruncated;
         if (isTruncated) {
-          params.Marker = data.Contents[data.Contents.length - 1].Key;
+          // If truncated, set the continuation token for the next request
+          params.ContinuationToken = data.NextContinuationToken;
         }
+
         logger.trace(`S3DB: Iteration ${iteration}, retrieved ${data.Contents.length} keys from: s3://${this.bucketName}/${fullPrefix}`);
+        logger.trace(`S3DB: Filtered keys: ${JSON.stringify(filteredKeys)}`);
       } catch (err) {
+        logger.error(`S3DB: Error listing objects in bucket ${this.bucketName} with prefix ${fullPrefix}: ${err.message}`);
         throw new Error(`Failed to list objects in bucket ${this.bucketName} with prefix ${fullPrefix}: ${err.message}`);
       }
     }
     logger.trace(`S3DB: Total ${allKeys.length} keys retrieved from: s3://${this.bucketName}/${fullPrefix}`);
     return allKeys;
   }
-
+    
   async existsFullyQualified(key) {
     const params = {
       Bucket: this.bucketName,
@@ -284,6 +303,19 @@ function ensureJsonExtension(key) {
   }
 
   return key;
+}
+
+// Helper function to extract and filter keys from the S3 listObjectsV2 response
+function extractKeys(data, fullPrefix) {
+  return data.Contents
+    .map(obj => obj.Key)
+    .filter(key => key.startsWith(fullPrefix) && key !== fullPrefix)
+    .map(key => stripPrefixAndExtension(key, fullPrefix));
+}
+
+// Helper function to strip the prefix and file extension from a key
+function stripPrefixAndExtension(key, fullPrefix) {
+  return key.replace(fullPrefix, '').replace('.json', '');
 }
 
 module.exports = S3DB;
