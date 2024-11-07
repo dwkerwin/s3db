@@ -1,4 +1,5 @@
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command, CopyObjectCommand } = require('@aws-sdk/client-s3');
+const { Upload } = require('@aws-sdk/lib-storage');
 const logger = require('./logger');
 const path = require('path');
 
@@ -15,35 +16,44 @@ class S3DB {
     this.bucketName = bucketName;
     this.prefix = prefix;
 
-    // Create an S3 instance
-    this.s3 = new AWS.S3();
+    // Create an S3 client instance
+    this.s3Client = new S3Client({});
   }
 
-  async putBlob(key, data) {
-    const s3Key = joinPath(this.prefix, key);
+  async putRaw(key, data) {
     const params = {
       Bucket: this.bucketName,
-      Key: s3Key,
+      Key: joinPath(this.prefix, key),
       Body: data,
     };
 
-    logger.trace(`S3DB: Uploading object: s3://${this.bucketName}/${s3Key}`);
-    await this.s3.upload(params).promise();
+    logger.trace(`S3DB: Uploading raw object: s3://${this.bucketName}/${params.Key}`);
+    const upload = new Upload({
+      client: this.s3Client,
+      params
+    });
+
+    await upload.done();
   }
 
   async put(key, data, options = {}) {
     key = ensureJsonExtension(key);
-    let body = null;
-    if (options.formatForReadability) {
-      body = JSON.stringify(data, null, 2);
-    } else {
-      body = JSON.stringify(data);
-    }
+    const params = {
+      Bucket: this.bucketName,
+      Key: joinPath(this.prefix, key),
+      Body: options.formatForReadability ? JSON.stringify(data, null, 2) : JSON.stringify(data)
+    };
 
-    await this.putBlob(key, body);
+    logger.trace(`S3DB: Uploading object: s3://${this.bucketName}/${params.Key}`);
+    const upload = new Upload({
+      client: this.s3Client,
+      params
+    });
+
+    await upload.done();
   }
 
-  async getBlob(key, options = {}) {
+  async getRaw(key, options = {}) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
@@ -52,10 +62,15 @@ class S3DB {
     logger.trace(`S3DB: Retrieving object: s3://${this.bucketName}/${s3Key}`);
 
     try {
-      const data = await this.s3.getObject(params).promise();
-      return data.Body;
+      const response = await this.s3Client.send(new GetObjectCommand(params));
+      // Convert the readable stream to a buffer
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(chunk);
+      }
+      return Buffer.concat(chunks);
     } catch (err) {
-      if (err.code === 'NoSuchKey' && options.returnNullIfNotFound) {
+      if (err.name === 'NoSuchKey' && options.returnNullIfNotFound) {
         logger.trace(`S3DB: Object not found: s3://${this.bucketName}/${s3Key}`);
         return null;
       }
@@ -65,7 +80,7 @@ class S3DB {
 
   async get(key, options = {}) {
     key = ensureJsonExtension(key);
-    const body = await this.getBlob(key, options);
+    const body = await this.getRaw(key, options);
 
     if (body === null) {
       return null;
@@ -78,15 +93,15 @@ class S3DB {
     }
   }
 
-  // getBlob returns a buffer, so if we want it as a string, here's a handy
+  // getRaw returns a buffer, so if we want it as a string, here's a handy
   // wrapper function to convert it to a string
   async getString(key, options = {}) {
     const encoding = options.encoding || 'utf-8';
-    const body = await this.getBlob(key, options);
+    const body = await this.getRaw(key, options);
     return body ? body.toString(encoding) : null;
   }
 
-  async deleteBlob(key) {
+  async deleteRaw(key) {
     const s3Key = joinPath(this.prefix, key);
     const params = {
       Bucket: this.bucketName,
@@ -95,7 +110,7 @@ class S3DB {
   
     logger.trace(`S3DB Deleting object: s3://${this.bucketName}/${s3Key}`);
     try {
-      await this.s3.deleteObject(params).promise();
+      await this.s3Client.send(new DeleteObjectCommand(params));
       logger.trace(`S3DB Successfully deleted object: s3://${this.bucketName}/${s3Key}`);
     } catch (err) {
       logger.error(`S3DB Error deleting object: s3://${this.bucketName}/${s3Key}`, err);
@@ -105,7 +120,7 @@ class S3DB {
 
   async delete(key) {
     key = ensureJsonExtension(key);
-    await this.deleteBlob(key);
+    await this.deleteRaw(key);
   }
 
   async update(key, newData) {
@@ -130,12 +145,10 @@ class S3DB {
       throw new Error(`Invalid subPath: ${subPath}. SubPath must be a string.`);
     }
 
-    // Build the full prefix for the S3 path
     let fullPrefix = this.prefix;
     if (subPath) {
       fullPrefix = joinPath(this.prefix, subPath);
     }
-    // Ensure the prefix ends with a '/'
     fullPrefix = fullPrefix.endsWith('/') ? fullPrefix : fullPrefix + '/';
 
     logger.trace(`S3DB: Listing objects with fullPrefix: ${fullPrefix}`);
@@ -148,32 +161,27 @@ class S3DB {
     const allKeys = [];
     let isTruncated = true;
     let iteration = 0;
+
     while (isTruncated) {
       iteration++;
       try {
-        // Fetch the list of objects from S3
-        const data = await this.s3.listObjectsV2(params).promise();
-
-        // Extract and filter keys from the response
-        const filteredKeys = extractKeys(data, fullPrefix);
-
-        // Append the filtered keys to the allKeys array
+        const response = await this.s3Client.send(new ListObjectsV2Command(params));
+        const filteredKeys = extractKeys(response, fullPrefix);
         allKeys.push(...filteredKeys);
-
-        // Check if the response is truncated (more data to fetch)
-        isTruncated = data.IsTruncated;
+        
+        isTruncated = response.IsTruncated;
         if (isTruncated) {
-          // If truncated, set the continuation token for the next request
-          params.ContinuationToken = data.NextContinuationToken;
+          params.ContinuationToken = response.NextContinuationToken;
         }
 
-        logger.trace(`S3DB: Iteration ${iteration}, retrieved ${data.Contents.length} keys from: s3://${this.bucketName}/${fullPrefix}`);
+        logger.trace(`S3DB: Iteration ${iteration}, retrieved ${response.Contents?.length || 0} keys from: s3://${this.bucketName}/${fullPrefix}`);
         logger.trace(`S3DB: Filtered keys: ${JSON.stringify(filteredKeys)}`);
       } catch (err) {
         logger.error(`S3DB: Error listing objects in bucket ${this.bucketName} with prefix ${fullPrefix}: ${err.message}`);
         throw new Error(`Failed to list objects in bucket ${this.bucketName} with prefix ${fullPrefix}: ${err.message}`);
       }
     }
+    
     logger.trace(`S3DB: Total ${allKeys.length} keys retrieved from: s3://${this.bucketName}/${fullPrefix}`);
     return allKeys;
   }
@@ -186,11 +194,11 @@ class S3DB {
 
     try {
       logger.trace(`S3DB: Checking for object existence at: s3://${this.bucketName}/${key}`);
-      await this.s3.headObject(params).promise();
+      await this.s3Client.send(new HeadObjectCommand(params));
       logger.trace(`S3DB: Object exists: s3://${this.bucketName}/${key}`);
       return true;
     } catch (err) {
-      if (err.code === 'NotFound') {
+      if (err.name === 'NotFound') {
         logger.trace(`S3DB: Object does not exist: s3://${this.bucketName}/${key}`);
         return false;
       }
@@ -199,7 +207,7 @@ class S3DB {
     }
   }
 
-  async existsBlob(key) {
+  async existsRaw(key) {
     const s3Key = joinPath(this.prefix, key); // Construct the fully qualified key
     return await this.existsFullyQualified(s3Key); // Delegate to existsFullyQualified
   }
@@ -231,7 +239,6 @@ class S3DB {
   // you need to specify the entire path for the source and destination,
   // including file extension, this method will not append '.json' to the keys
   async copyFullyQualified(sourcePath, destinationPath) {
-    // Check if the source object exists
     const sourceExists = await this.existsFullyQualified(sourcePath);
     if (!sourceExists) {
       const errorMsg = `S3DB: Error copying object from ${sourcePath} to ${destinationPath}: The specified source key does not exist.`;
@@ -246,7 +253,7 @@ class S3DB {
     };
 
     try {
-      await this.s3.copyObject(copyParams).promise();
+      await this.s3Client.send(new CopyObjectCommand(copyParams));
       logger.trace(`S3DB: Copied object from ${sourcePath} to ${destinationPath}`);
     } catch (err) {
       logger.error(`S3DB: Error copying object from ${sourcePath} to ${destinationPath}: ${err.message}`);
@@ -267,12 +274,34 @@ class S3DB {
     };
 
     try {
-      await this.s3.deleteObject(deleteParams).promise();
+      await this.s3Client.send(new DeleteObjectCommand(deleteParams));
       logger.trace(`S3DB: Deleted original object at ${sourcePath}`);
     } catch (err) {
       logger.error(`S3DB: Error deleting original object at ${sourcePath}: ${err.message}`);
       throw err;
     }
+  }
+
+  // Add these methods to maintain the public interface:
+
+  async putBlob(key, data) {
+    logger.trace(`S3DB: putBlob is deprecated, please use putRaw instead`);
+    return await this.putRaw(key, data);
+  }
+
+  async getBlob(key, options = {}) {
+    logger.trace(`S3DB: getBlob is deprecated, please use getRaw instead`);
+    return await this.getRaw(key, options);
+  }
+
+  async deleteBlob(key) {
+    logger.trace(`S3DB: deleteBlob is deprecated, please use deleteRaw instead`);
+    return await this.deleteRaw(key);
+  }
+
+  async existsBlob(key) {
+    logger.trace(`S3DB: existsBlob is deprecated, please use existsRaw instead`);
+    return await this.existsRaw(key);
   }
 
 }
@@ -307,6 +336,9 @@ function ensureJsonExtension(key) {
 
 // Helper function to extract and filter keys from the S3 listObjectsV2 response
 function extractKeys(data, fullPrefix) {
+  if (!data.Contents) {
+    return [];
+  }
   return data.Contents
     .map(obj => obj.Key)
     .filter(key => key.startsWith(fullPrefix) && key !== fullPrefix)
