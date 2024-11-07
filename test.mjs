@@ -1,14 +1,14 @@
 import * as chai from 'chai';
 const expect = chai.expect;
 import S3DB from './index.js';
-import AWS from 'aws-sdk';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 // Replace these constants with your test bucket and region
 const TEST_BUCKET = 's3dbunittestbucket';
 const REGION = 'us-east-1';
 
 // Initialize AWS S3 client
-const s3 = new AWS.S3({ region: REGION });
+const s3Client = new S3Client({ region: REGION });
 
 // Helper function to clear the bucket
 async function clearBucket(bucket) {
@@ -16,22 +16,21 @@ async function clearBucket(bucket) {
     Bucket: bucket
   };
 
-  const listedObjects = await s3.listObjectsV2(listParams).promise();
-
-  if (listedObjects.Contents.length === 0) return;
+  const response = await s3Client.send(new ListObjectsV2Command(listParams));
+  if (!response.Contents || response.Contents.length === 0) return;
 
   const deleteParams = {
     Bucket: bucket,
     Delete: { Objects: [] }
   };
 
-  listedObjects.Contents.forEach(({ Key }) => {
+  response.Contents.forEach(({ Key }) => {
     deleteParams.Delete.Objects.push({ Key });
   });
 
-  await s3.deleteObjects(deleteParams).promise();
+  await s3Client.send(new DeleteObjectsCommand(deleteParams));
 
-  if (listedObjects.IsTruncated) await clearBucket(bucket);
+  if (response.IsTruncated) await clearBucket(bucket);
 }
 
 describe('S3DB Integration Tests', function() {
@@ -50,11 +49,11 @@ describe('S3DB Integration Tests', function() {
     await clearBucket(TEST_BUCKET);
 
     // Create test files in the S3 bucket
-    await s3.putObject({ Bucket: TEST_BUCKET, Key: 'users/U12345', Body: JSON.stringify(userData) }).promise();
-    await s3.putObject({ Bucket: TEST_BUCKET, Key: 'users/subpath/U12346', Body: JSON.stringify(userData) }).promise();
-    await s3.putObject({ Bucket: TEST_BUCKET, Key: 'users/subpath/subsubpath/U12347', Body: JSON.stringify(userData) }).promise();
-    await s3.putObject({ Bucket: TEST_BUCKET, Key: 'alternate-users/U54321', Body: JSON.stringify(userData) }).promise();
-    await s3.putObject({ Bucket: TEST_BUCKET, Key: 'alternate-users/subpath/U54322', Body: JSON.stringify(userData) }).promise();
+    await s3Client.send(new PutObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/U12345', Body: JSON.stringify(userData) }));
+    await s3Client.send(new PutObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/subpath/U12346', Body: JSON.stringify(userData) }));
+    await s3Client.send(new PutObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/subpath/subsubpath/U12347', Body: JSON.stringify(userData) }));
+    await s3Client.send(new PutObjectCommand({ Bucket: TEST_BUCKET, Key: 'alternate-users/U54321', Body: JSON.stringify(userData) }));
+    await s3Client.send(new PutObjectCommand({ Bucket: TEST_BUCKET, Key: 'alternate-users/subpath/U54322', Body: JSON.stringify(userData) }));
   });
 
   after(async function() {
@@ -74,9 +73,9 @@ describe('S3DB Integration Tests', function() {
     expect(nonExistentData).to.be.null;
   });
 
-  it('should return null and not throw an exception when getting a non-existent blob', async function() {
-    const nonExistentBlob = await s3db.getBlob('nonexistent', { returnNullIfNotFound: true });
-    expect(nonExistentBlob).to.be.null;
+  it('should return null and not throw an exception when getting a non-existent raw object', async function() {
+    const nonExistentRaw = await s3db.getRaw('nonexistent', { returnNullIfNotFound: true });
+    expect(nonExistentRaw).to.be.null;
   });
 
   it('should throw an exception when getting a non-existent object without returnNullIfNotFound option', async function() {
@@ -136,17 +135,17 @@ describe('S3DB Integration Tests', function() {
 
     // Directly verify that the objects do not exist anymore using the AWS S3 SDK
     try {
-      await s3.getObject({ Bucket: TEST_BUCKET, Key: 'users/U12345.json' }).promise();
+      await s3Client.send(new GetObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/U12345.json' }));
       expect.fail('Expected an error, but none was thrown'); // Fail if no error is thrown
     } catch (err) {
-      expect(err.code).to.equal('NoSuchKey');
+      expect(err.name).to.equal('NoSuchKey');
     }
 
     try {
-      await s3.getObject({ Bucket: TEST_BUCKET, Key: 'users/subpath/U12346.json' }).promise();
+      await s3Client.send(new GetObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/subpath/U12346.json' }));
       expect.fail('Expected an error, but none was thrown'); // Fail if no error is thrown
     } catch (err) {
-      expect(err.code).to.equal('NoSuchKey');
+      expect(err.name).to.equal('NoSuchKey');
     }
   });
 
@@ -154,34 +153,34 @@ describe('S3DB Integration Tests', function() {
     const stringKey = 'S12345';
     const stringData = 'Hello, world!';
     const bufferData = Buffer.from(stringData, 'utf-8');
-    await s3db.putBlob(stringKey, bufferData);
+    await s3db.putRaw(stringKey, bufferData);
     const retrievedData = await s3db.getString(stringKey, { encoding: 'utf-8' });
     expect(retrievedData).to.equal(stringData);
-    await s3db.deleteBlob(stringKey);
+    await s3db.deleteRaw(stringKey);
   });
 
-  it('should create a blob object', async function() {
-    const blobKey = 'B12345';
-    const blobData = Buffer.from('Hello, world!', 'utf-8');
-    await s3db.putBlob(blobKey, blobData);
-    const retrievedData = await s3db.getBlob(blobKey);
+  it('should create a raw object', async function() {
+    const rawKey = 'B12345';
+    const rawData = Buffer.from('Hello, world!', 'utf-8');
+    await s3db.putRaw(rawKey, rawData);
+    const retrievedData = await s3db.getRaw(rawKey);
     expect(retrievedData.toString('utf-8')).to.equal('Hello, world!');
   });
 
-  it('should check if the blob object exists', async function() {
-    const blobKey = 'B12345';
-    const blobData = Buffer.from('Hello, world!', 'utf-8');
-    await s3db.putBlob(blobKey, blobData);
-    const doesExist = await s3db.existsBlob(blobKey);
+  it('should check if the raw object exists', async function() {
+    const rawKey = 'B12345';
+    const rawData = Buffer.from('Hello, world!', 'utf-8');
+    await s3db.putRaw(rawKey, rawData);
+    const doesExist = await s3db.existsRaw(rawKey);
     expect(doesExist).to.be.true;
-    await s3db.deleteBlob(blobKey);
+    await s3db.deleteRaw(rawKey);
   });
 
-  it('should delete the blob object', async function() {
-    const blobKey = 'B12345';
-    await s3db.deleteBlob(blobKey);
+  it('should delete the raw object', async function() {
+    const rawKey = 'B12345';
+    await s3db.deleteRaw(rawKey);
     await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for 3 seconds to ensure S3 propagation
-    const doesExist = await s3db.existsBlob(blobKey);
+    const doesExist = await s3db.existsRaw(rawKey);
     expect(doesExist).to.be.false;
   });
 
@@ -267,17 +266,17 @@ describe('S3DB Integration Tests', function() {
 
     // Directly verify that the objects do not exist anymore using the AWS S3 SDK
     try {
-      await s3.getObject({ Bucket: TEST_BUCKET, Key: 'alternate-users/U54321.json' }).promise();
+      await s3Client.send(new GetObjectCommand({ Bucket: TEST_BUCKET, Key: 'alternate-users/U54321.json' }));
       expect.fail('Expected an error, but none was thrown'); // Fail if no error is thrown
     } catch (err) {
-      expect(err.code).to.equal('NoSuchKey');
+      expect(err.name).to.equal('NoSuchKey');
     }
 
     try {
-      await s3.getObject({ Bucket: TEST_BUCKET, Key: 'alternate-users/subpath/U54322.json' }).promise();
+      await s3Client.send(new GetObjectCommand({ Bucket: TEST_BUCKET, Key: 'alternate-users/subpath/U54322.json' }));
       expect.fail('Expected an error, but none was thrown'); // Fail if no error is thrown
     } catch (err) {
-      expect(err.code).to.equal('NoSuchKey');
+      expect(err.name).to.equal('NoSuchKey');
     }
   });
 
@@ -304,17 +303,17 @@ describe('S3DB Integration Tests', function() {
   
     // Verify the objects are deleted
     try {
-      await s3.getObject({ Bucket: TEST_BUCKET, Key: 'users/listTest/U1.json' }).promise();
+      await s3Client.send(new GetObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/listTest/U1.json' }));
       expect.fail('Expected an error, but none was thrown'); // Fail if no error is thrown
     } catch (err) {
-      expect(err.code).to.equal('NoSuchKey');
+      expect(err.name).to.equal('NoSuchKey');
     }
   
     try {
-      await s3.getObject({ Bucket: TEST_BUCKET, Key: 'users/listTest/subpath/U2.json' }).promise();
+      await s3Client.send(new GetObjectCommand({ Bucket: TEST_BUCKET, Key: 'users/listTest/subpath/U2.json' }));
       expect.fail('Expected an error, but none was thrown'); // Fail if no error is thrown
     } catch (err) {
-      expect(err.code).to.equal('NoSuchKey');
+      expect(err.name).to.equal('NoSuchKey');
     }
   
     // List objects again and verify only the remaining object is listed
@@ -332,7 +331,7 @@ describe('S3DB Integration Tests', function() {
     const exactPrefixS3db = new S3DB(TEST_BUCKET, 'testdata/doesnotexist/');
   
     // Create a test object in a similar but different path
-    await s3.putObject({ Bucket: TEST_BUCKET, Key: 'testdata/doesnotexist_doesexist/12345', Body: JSON.stringify(userData) }).promise();
+    await s3Client.send(new PutObjectCommand({ Bucket: TEST_BUCKET, Key: 'testdata/doesnotexist_doesexist/12345', Body: JSON.stringify(userData) }));
   
     // List objects with the non-existent prefix
     const userIds = await exactPrefixS3db.list();
@@ -341,7 +340,7 @@ describe('S3DB Integration Tests', function() {
     expect(userIds).to.be.empty;
   
     // Clean up the test object
-    await s3.deleteObject({ Bucket: TEST_BUCKET, Key: 'testdata/doesnotexist_doesexist/12345' }).promise();
+    await s3Client.send(new DeleteObjectCommand({ Bucket: TEST_BUCKET, Key: 'testdata/doesnotexist_doesexist/12345' }));
   });
 
 });
