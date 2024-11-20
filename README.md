@@ -131,10 +131,14 @@ await s3db.deleteRaw(blobKey);
 
 ## Create Testing Infrastructure
 
-This is to create the testin S3 bucket necessary to run unit tests.  Requires the AWS CLI and active AWS credentials to be configured in the environment.
+This is to create the testing S3 bucket necessary to run unit tests. Requires the AWS CLI and active AWS credentials to be configured in the environment.
 
 ```shell
+# Create a new stack
 aws cloudformation create-stack --stack-name S3DBUnitTestStack --template-body file://cloudformation.yml
+
+# Update an existing stack
+aws cloudformation update-stack --stack-name S3DBUnitTestStack --template-body file://cloudformation.yml
 ```
 
 ## Test
