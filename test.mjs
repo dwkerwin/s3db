@@ -343,4 +343,54 @@ describe('S3DB Integration Tests', function() {
     await s3Client.send(new DeleteObjectCommand({ Bucket: TEST_BUCKET, Key: 'testdata/doesnotexist_doesexist/12345' }));
   });
 
+  it('should create an encrypted object with KMS key', async function() {
+    const encryptedS3db = new S3DB(TEST_BUCKET, 'encrypted-users', 'alias/s3db-unittest-key');
+    await encryptedS3db.put(userId, userData);
+    const retrievedData = await encryptedS3db.get(userId);
+    expect(retrievedData).to.deep.equal(userData);
+    await encryptedS3db.delete(userId);
+  });
+
+  it('should create an encrypted raw object with KMS key', async function() {
+    const encryptedS3db = new S3DB(TEST_BUCKET, 'encrypted-users', 'alias/s3db-unittest-key');
+    const rawKey = 'B12345';
+    const rawData = Buffer.from('Hello, world!', 'utf-8');
+    await encryptedS3db.putRaw(rawKey, rawData);
+    const retrievedData = await encryptedS3db.getRaw(rawKey);
+    expect(retrievedData.toString('utf-8')).to.equal('Hello, world!');
+    await encryptedS3db.deleteRaw(rawKey);
+  });
+
+  it('should create and read back an encrypted object with KMS key', async function() {
+    const encryptedS3db = new S3DB(TEST_BUCKET, 'encrypted-users', 'alias/s3db-unittest-key');
+    const testUserId = 'encrypted-user-123';
+    const testUserData = { name: 'Alice Encrypted', email: 'alice.encrypted@example.com' };
+    
+    // Write the encrypted data
+    await encryptedS3db.put(testUserId, testUserData);
+    
+    // Create a new S3DB instance with the same KMS key to verify reading works with a fresh instance
+    const readEncryptedS3db = new S3DB(TEST_BUCKET, 'encrypted-users', 'alias/s3db-unittest-key');
+    const retrievedData = await readEncryptedS3db.get(testUserId);
+    
+    expect(retrievedData).to.deep.equal(testUserData);
+    await encryptedS3db.delete(testUserId);
+  });
+
+  it('should create and read back an encrypted raw object with KMS key', async function() {
+    const encryptedS3db = new S3DB(TEST_BUCKET, 'encrypted-users', 'alias/s3db-unittest-key');
+    const rawKey = 'encrypted-raw-123';
+    const rawData = Buffer.from('Secret encrypted data!', 'utf-8');
+    
+    // Write the encrypted data
+    await encryptedS3db.putRaw(rawKey, rawData);
+    
+    // Create a new S3DB instance with the same KMS key to verify reading works with a fresh instance
+    const readEncryptedS3db = new S3DB(TEST_BUCKET, 'encrypted-users', 'alias/s3db-unittest-key');
+    const retrievedData = await readEncryptedS3db.getRaw(rawKey);
+    
+    expect(retrievedData.toString('utf-8')).to.equal('Secret encrypted data!');
+    await encryptedS3db.deleteRaw(rawKey);
+  });
+
 });

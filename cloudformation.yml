@@ -36,3 +36,21 @@ Resources:
             Condition:
               StringLike:
                 's3:x-amz-grant-read': '*'
+  UnittestKMSKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: 'KMS key for S3DB unit tests'
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'Enable IAM User Permissions'
+            Effect: 'Allow'
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+  UnittestKMSKeyAlias:
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: 'alias/s3db-unittest-key'
+      TargetKeyId: !Ref UnittestKMSKey
