@@ -4,7 +4,7 @@ const logger = require('./logger');
 const path = require('path');
 
 class S3DB {
-  constructor(bucketName, prefix = '') {
+  constructor(bucketName, prefix = '', kmsKeyId = '') {
     if (typeof bucketName !== 'string') {
       throw new Error(`Invalid bucket name: ${bucketName}. Bucket name must be a string.`);
     }
@@ -13,8 +13,13 @@ class S3DB {
       throw new Error(`Invalid prefix: ${prefix}. Prefix must be a string.`);
     }
 
+    if (kmsKeyId && typeof kmsKeyId !== 'string') {
+      throw new Error(`Invalid KMS key ID: ${kmsKeyId}. KMS key ID must be a string.`);
+    }
+
     this.bucketName = bucketName;
     this.prefix = prefix;
+    this.kmsKeyId = kmsKeyId;
 
     // Create an S3 client instance
     this.s3Client = new S3Client({});
@@ -26,6 +31,12 @@ class S3DB {
       Key: joinPath(this.prefix, key),
       Body: data,
     };
+
+    // Add ServerSideEncryption parameters if KMS key is provided
+    if (this.kmsKeyId) {
+      params.ServerSideEncryption = 'aws:kms';
+      params.SSEKMSKeyId = this.kmsKeyId;
+    }
 
     logger.trace(`S3DB: Uploading raw object: s3://${this.bucketName}/${params.Key}`);
     const upload = new Upload({
@@ -43,6 +54,12 @@ class S3DB {
       Key: joinPath(this.prefix, key),
       Body: options.formatForReadability ? JSON.stringify(data, null, 2) : JSON.stringify(data)
     };
+
+    // Add ServerSideEncryption parameters if KMS key is provided
+    if (this.kmsKeyId) {
+      params.ServerSideEncryption = 'aws:kms';
+      params.SSEKMSKeyId = this.kmsKeyId;
+    }
 
     logger.trace(`S3DB: Uploading object: s3://${this.bucketName}/${params.Key}`);
     const upload = new Upload({

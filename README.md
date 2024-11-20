@@ -81,6 +81,22 @@ await s3db.moveFullyQualified('myuserdatabucket/users/U12345.json', 'myuserdatab
 // qualified paths
 ```
 
+## Server-Side Encryption with KMS
+
+S3DB supports server-side encryption using AWS KMS keys. You can specify either a KMS key ID or a KMS alias when creating an S3DB instance:
+
+```javascript
+// Create an S3DB instance with KMS encryption (using either key ID or alias)
+const s3db = new S3DB('myuserdatabucket', 'users', '1234abcd-12ab-34cd-56ef-1234567890ab'); // Using key ID
+// OR
+const s3db = new S3DB('myuserdatabucket', 'users', 'alias/my-kms-key'); // Using alias
+
+// Write and read data - encryption is handled automatically
+const userData = { name: 'John Doe', email: 'john@example.com' };
+await s3db.put('user123', userData);
+const retrieved = await s3db.get('user123');
+```
+
 ## Working with Blobs
 
 In addition to the standard methods for working with JSON objects, S3DB also provides methods for working with blobs of any type. These methods are:
